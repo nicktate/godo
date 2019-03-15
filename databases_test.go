@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var db1 = &Database{
+var db = Database{
 	ID:          "da4e0206-d019-41d7-b51f-deadbeefbb8f",
 	Name:        "dbtest",
 	EngineSlug:  "pg",
@@ -24,8 +24,8 @@ var db1 = &Database{
 		Password: "zt91mum075ofzyww",
 		SSL:      true,
 	},
-	Users: []*DatabaseUser{
-		&DatabaseUser{
+	Users: []DatabaseUser{
+		DatabaseUser{
 			Name:     "doadmin",
 			Role:     "primary",
 			Password: "zt91mum075ofzyww",
@@ -47,14 +47,14 @@ var db1 = &Database{
 	SizeSlug: "db-s-2vcpu-4gb",
 }
 
-var db1JSON = `
+var dbJSON = `
 {
 	"id": "da4e0206-d019-41d7-b51f-deadbeefbb8f",
 	"name": "dbtest",
 	"engine": "pg",
 	"version": "11",
 	"connection": {
-		"uri": "postgres://doadmin:zt91mum075ofzyww@dbtest-do-user-3342561-0.db.ondigitalocean.com:25060/defaultdb?sslmode=require",                                                                               
+		"uri": "postgres://doadmin:zt91mum075ofzyww@dbtest-do-user-3342561-0.db.ondigitalocean.com:25060/defaultdb?sslmode=require",
 		"database": "",
 		"host": "dbtest-do-user-3342561-0.db.ondigitalocean.com",
 		"port": 25060,
@@ -86,24 +86,25 @@ var db1JSON = `
 }
 `
 
+var dbsJSON = fmt.Sprintf(`
+{
+  "databases": [
+	%s
+  ]
+}
+`, dbJSON)
+
 func TestDatabases_List(t *testing.T) {
 	setup()
 	defer teardown()
 
 	dbSvc := client.Databases
 
-	want := []*Database{db1}
-	jBlob := fmt.Sprintf(`
-{
-  "databases": [
-	%s
-  ]
-}
-`, db1JSON)
+	want := []Database{db}
 
 	mux.HandleFunc("/v2/databases", func(w http.ResponseWriter, r *http.Request) {
 		testMethod(t, r, http.MethodGet)
-		fmt.Fprint(w, jBlob)
+		fmt.Fprint(w, dbsJSON)
 	})
 
 	got, _, err := dbSvc.List(ctx, nil)
@@ -115,30 +116,25 @@ func TestDatabases_Get(t *testing.T) {
 	setup()
 	defer teardown()
 
-	dbSvc := client.Databases
-
-	want := db1
-	jBlob := fmt.Sprintf(`
+	body := fmt.Sprintf(`
 {
   "database": %s
 }
-`, db1JSON)
+`, dbJSON)
 
 	mux.HandleFunc("/v2/databases/da4e0206-d019-41d7-b51f-deadbeefbb8f", func(w http.ResponseWriter, r *http.Request) {
 		testMethod(t, r, http.MethodGet)
-		fmt.Fprint(w, jBlob)
+		fmt.Fprint(w, body)
 	})
 
-	got, _, err := dbSvc.Get(ctx, "da4e0206-d019-41d7-b51f-deadbeefbb8f")
+	got, _, err := client.Databases.Get(ctx, "da4e0206-d019-41d7-b51f-deadbeefbb8f")
 	require.NoError(t, err)
-	require.Equal(t, want, got)
+	require.Equal(t, &db, got)
 }
 
 func TestDatabases_Create(t *testing.T) {
 	setup()
 	defer teardown()
-
-	dbSvc := client.Databases
 
 	want := &Database{
 		ID:          "8d91899c-0739-4a1a-acc5-deadbeefbb8f",
@@ -172,7 +168,7 @@ func TestDatabases_Create(t *testing.T) {
 		NumNodes:   2,
 	}
 
-	jBlob := `
+	body := `
 {
 	"database": {
 		"id": "8d91899c-0739-4a1a-acc5-deadbeefbb8f",
@@ -180,7 +176,7 @@ func TestDatabases_Create(t *testing.T) {
 		"engine": "pg",
 		"version": "10",
 		"connection": {
-			"uri": "postgres://doadmin:zt91mum075ofzyww@dbtest-do-user-3342561-0.db.ondigitalocean.com:25060/defaultdb?sslmode=require",                                                                               
+			"uri": "postgres://doadmin:zt91mum075ofzyww@dbtest-do-user-3342561-0.db.ondigitalocean.com:25060/defaultdb?sslmode=require",
 			"database": "",
 			"host": "dbtest-do-user-3342561-0.db.ondigitalocean.com",
 			"port": 25060,
@@ -208,10 +204,10 @@ func TestDatabases_Create(t *testing.T) {
 
 		testMethod(t, r, http.MethodPost)
 		require.Equal(t, v, createRequest)
-		fmt.Fprint(w, jBlob)
+		fmt.Fprint(w, body)
 	})
 
-	got, _, err := dbSvc.Create(ctx, createRequest)
+	got, _, err := client.Databases.Create(ctx, createRequest)
 	require.NoError(t, err)
 	require.Equal(t, want, got)
 }
@@ -220,13 +216,13 @@ func TestDatabases_Delete(t *testing.T) {
 	setup()
 	defer teardown()
 
-	dbSvc := client.Databases
+	path := "/v2/databases/deadbeef-dead-4aa5-beef-deadbeef347d"
 
-	mux.HandleFunc("/v2/databases/deadbeef-dead-4aa5-beef-deadbeef347d", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
 		testMethod(t, r, http.MethodDelete)
 	})
 
-	_, err := dbSvc.Delete(ctx, "deadbeef-dead-4aa5-beef-deadbeef347d")
+	_, err := client.Databases.Delete(ctx, "deadbeef-dead-4aa5-beef-deadbeef347d")
 	require.NoError(t, err)
 }
 
@@ -234,18 +230,18 @@ func TestDatabases_Resize(t *testing.T) {
 	setup()
 	defer teardown()
 
-	dbSvc := client.Databases
-
 	resizeRequest := &DatabaseResizeRequest{
 		SizeSlug: "db-s-16vcpu-64gb",
 		NumNodes: 3,
 	}
 
-	mux.HandleFunc("/v2/databases/deadbeef-dead-4aa5-beef-deadbeef347d/resize", func(w http.ResponseWriter, r *http.Request) {
+	path := "/v2/databases/deadbeef-dead-4aa5-beef-deadbeef347d/resize"
+
+	mux.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
 		testMethod(t, r, http.MethodPut)
 	})
 
-	_, err := dbSvc.Resize(ctx, "deadbeef-dead-4aa5-beef-deadbeef347d", resizeRequest)
+	_, err := client.Databases.Resize(ctx, "deadbeef-dead-4aa5-beef-deadbeef347d", resizeRequest)
 	require.NoError(t, err)
 }
 
@@ -253,17 +249,17 @@ func TestDatabases_Migrate(t *testing.T) {
 	setup()
 	defer teardown()
 
-	dbSvc := client.Databases
-
 	migrateRequest := &DatabaseMigrateRequest{
 		Region: "lon1",
 	}
 
-	mux.HandleFunc("/v2/databases/deadbeef-dead-4aa5-beef-deadbeef347d/migrate", func(w http.ResponseWriter, r *http.Request) {
+	path := "/v2/databases/deadbeef-dead-4aa5-beef-deadbeef347d/migrate"
+
+	mux.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
 		testMethod(t, r, http.MethodPut)
 	})
 
-	_, err := dbSvc.Migrate(ctx, "deadbeef-dead-4aa5-beef-deadbeef347d", migrateRequest)
+	_, err := client.Databases.Migrate(ctx, "deadbeef-dead-4aa5-beef-deadbeef347d", migrateRequest)
 	require.NoError(t, err)
 }
 
@@ -271,18 +267,18 @@ func TestDatabases_UpdateMaintenance(t *testing.T) {
 	setup()
 	defer teardown()
 
-	dbSvc := client.Databases
-
 	maintenanceRequest := &DatabaseUpdateMaintenanceRequest{
 		Day:  "thursday",
 		Hour: "16:00",
 	}
 
-	mux.HandleFunc("/v2/databases/deadbeef-dead-4aa5-beef-deadbeef347d/maintenance", func(w http.ResponseWriter, r *http.Request) {
+	path := "/v2/databases/deadbeef-dead-4aa5-beef-deadbeef347d/maintenance"
+
+	mux.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
 		testMethod(t, r, http.MethodPut)
 	})
 
-	_, err := dbSvc.UpdateMaintenance(ctx, "deadbeef-dead-4aa5-beef-deadbeef347d", maintenanceRequest)
+	_, err := client.Databases.UpdateMaintenance(ctx, "deadbeef-dead-4aa5-beef-deadbeef347d", maintenanceRequest)
 	require.NoError(t, err)
 }
 
@@ -290,19 +286,18 @@ func TestDatabases_ListBackups(t *testing.T) {
 	setup()
 	defer teardown()
 
-	dbSvc := client.Databases
-
-	want := []*DatabaseBackup{
-		&DatabaseBackup{
+	want := []DatabaseBackup{
+		DatabaseBackup{
 			CreatedAt:     time.Date(2019, 1, 11, 18, 42, 27, 0, time.UTC),
 			SizeGigabytes: 0.03357696,
 		},
-		&DatabaseBackup{
+		DatabaseBackup{
 			CreatedAt:     time.Date(2019, 1, 12, 18, 42, 29, 0, time.UTC),
 			SizeGigabytes: 0.03364864,
 		},
 	}
-	jBlob := `
+
+	body := `
 {
   "backups": [
     {
@@ -316,12 +311,14 @@ func TestDatabases_ListBackups(t *testing.T) {
   ]
 }
 `
-	mux.HandleFunc("/v2/databases/deadbeef-dead-4aa5-beef-deadbeef347d/backups", func(w http.ResponseWriter, r *http.Request) {
+	path := "/v2/databases/deadbeef-dead-4aa5-beef-deadbeef347d/backups"
+
+	mux.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
 		testMethod(t, r, http.MethodGet)
-		fmt.Fprint(w, jBlob)
+		fmt.Fprint(w, body)
 	})
 
-	got, _, err := dbSvc.ListBackups(ctx, "deadbeef-dead-4aa5-beef-deadbeef347d", nil)
+	got, _, err := client.Databases.ListBackups(ctx, "deadbeef-dead-4aa5-beef-deadbeef347d", nil)
 	require.NoError(t, err)
 	require.Equal(t, want, got)
 }
