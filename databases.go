@@ -158,7 +158,7 @@ type DatabasePool struct {
 	User       string              `json:"user"`
 	Name       string              `json:"name"`
 	Size       int                 `json:"size"`
-	Database   string              `json:"db"`
+	Database   string              `json:"database"`
 	Mode       string              `json:"mode"`
 	Connection *DatabaseConnection `json:"connection"`
 }
@@ -460,7 +460,7 @@ func (svc *DatabasesServiceOp) CreateDB(ctx context.Context, databaseID string, 
 		return nil, nil, err
 	}
 	root := new(databaseDBRoot)
-	resp, err := svc.client.Do(ctx, req, nil)
+	resp, err := svc.client.Do(ctx, req, root)
 	if err != nil {
 		return nil, resp, err
 	}
@@ -523,7 +523,7 @@ func (svc *DatabasesServiceOp) CreatePool(ctx context.Context, databaseID string
 		return nil, nil, err
 	}
 	root := new(databasePoolRoot)
-	resp, err := svc.client.Do(ctx, req, nil)
+	resp, err := svc.client.Do(ctx, req, root)
 	if err != nil {
 		return nil, resp, err
 	}
@@ -532,7 +532,7 @@ func (svc *DatabasesServiceOp) CreatePool(ctx context.Context, databaseID string
 
 // DeletePool will delete an existing database connection pool
 func (svc *DatabasesServiceOp) DeletePool(ctx context.Context, databaseID, name string) (*Response, error) {
-	path := fmt.Sprintf(databaseDBPath, databaseID, name)
+	path := fmt.Sprintf(databasePoolPath, databaseID, name)
 	req, err := svc.client.NewRequest(ctx, http.MethodDelete, path, nil)
 	if err != nil {
 		return nil, err
@@ -586,7 +586,7 @@ func (svc *DatabasesServiceOp) CreateReplica(ctx context.Context, databaseID str
 		return nil, nil, err
 	}
 	root := new(databaseReplicaRoot)
-	resp, err := svc.client.Do(ctx, req, nil)
+	resp, err := svc.client.Do(ctx, req, root)
 	if err != nil {
 		return nil, resp, err
 	}
