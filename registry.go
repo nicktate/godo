@@ -22,6 +22,7 @@ type RegistryService interface {
 	Get(context.Context) (*Registry, *Response, error)
 	Delete(context.Context) (*Response, error)
 	DockerCredentials(context.Context, *RegistryDockerCredentialsRequest) (*DockerCredentials, *Response, error)
+	ListRepositoryTags(context.Context, *RepositoryListTagsRequest, *ListOptions) ([]*RepositoryTag, *Response, error)
 }
 
 var _ RegistryService = &RegistryServiceOp{}
@@ -42,14 +43,38 @@ type RegistryDockerCredentialsRequest struct {
 	ReadWrite bool `json:"read_write"`
 }
 
+// RepositoryListTagsRequest represents a request to retrieve tags
+// for a given repository in a registry.
+type RepositoryListTagsRequest struct {
+	RegistryName string `json:"registry_name,omitempty"`
+	Repository   string `json:"repository,omitempty"`
+}
+
+type registryRoot struct {
+	Registry *Registry `json:"registry,omitempty"`
+}
+
+type repositoryTagsRoot struct {
+	Tags  []*RepositoryTag `json:"tags,omitempty"`
+	Links *Links           `json:"links,omitempty"`
+	Meta  *Meta            `json:"meta"`
+}
+
 // Registry represents a registry.
 type Registry struct {
 	Name      string    `json:"name,omitempty"`
 	CreatedAt time.Time `json:"created_at,omitempty"`
 }
 
-type registryRoot struct {
-	Registry *Registry `json:"registry,omitempty"`
+// RepositoryTag represents a repository tag
+type RepositoryTag struct {
+	RegistryName        string    `json:"registry_name,omitempty"`
+	Repository          string    `json:"repository,omitempty"`
+	Tag                 string    `json:"tag,omitempty"`
+	ManifestDigest      string    `json:"manifest_digest,omitempty"`
+	CompressedSizeBytes uint64    `json:"compressed_size_bytes,omitempty"`
+	SizeBytes           uint64    `json:"size_bytes,omitempty"`
+	UpdatedAt           time.Time `json:"updated_at,omitempty"`
 }
 
 // Get retrieves the details of a Registry.
@@ -120,4 +145,31 @@ func (svc *RegistryServiceOp) DockerCredentials(ctx context.Context, request *Re
 		DockerConfigJSON: buf.Bytes(),
 	}
 	return dc, resp, nil
+}
+
+// ListRepositoryTags returns a list of the RepositoryTags available within the given repository.
+func (svc *RegistryServiceOp) ListRepositoryTags(ctx context.Context, request *RepositoryListTagsRequest, opts *ListOptions) ([]*RepositoryTag, *Response, error) {
+	path := fmt.Sprintf("%s/%s/repositories/%s/tags", registryPath, request.RegistryName, request.Repository)
+	path, err := addOptions(path, opts)
+	if err != nil {
+		return nil, nil, err
+	}
+	req, err := svc.client.NewRequest(ctx, http.MethodGet, path, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	root := new(repositoryTagsRoot)
+	resp, err := svc.client.Do(ctx, req, root)
+	if err != nil {
+		return nil, resp, err
+	}
+
+	if l := root.Links; l != nil {
+		resp.Links = l
+	}
+	if m := root.Meta; m != nil {
+		resp.Meta = m
+	}
+
+	return root.Tags, resp, nil
 }
