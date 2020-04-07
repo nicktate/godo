@@ -22,6 +22,7 @@ type RegistryService interface {
 	Get(context.Context) (*Registry, *Response, error)
 	Delete(context.Context) (*Response, error)
 	DockerCredentials(context.Context, *RegistryDockerCredentialsRequest) (*DockerCredentials, *Response, error)
+	ListRepositories(context.Context, *RepositoryListRequest, *ListOptions) ([]*Repository, *Response, error)
 	ListRepositoryTags(context.Context, *RepositoryListTagsRequest, *ListOptions) ([]*RepositoryTag, *Response, error)
 }
 
@@ -43,6 +44,12 @@ type RegistryDockerCredentialsRequest struct {
 	ReadWrite bool `json:"read_write"`
 }
 
+// RepositoryListRequest represents a request to retrieve repositories
+// for a given registry.
+type RepositoryListRequest struct {
+	RegistryName string `json:"registry_name,omitempty"`
+}
+
 // RepositoryListTagsRequest represents a request to retrieve tags
 // for a given repository in a registry.
 type RepositoryListTagsRequest struct {
@@ -52,6 +59,12 @@ type RepositoryListTagsRequest struct {
 
 type registryRoot struct {
 	Registry *Registry `json:"registry,omitempty"`
+}
+
+type repositoriesRoot struct {
+	Repositories []*Repository `json:"repositories,omitempty"`
+	Links        *Links        `json:"links,omitempty"`
+	Meta         *Meta         `json:"meta"`
 }
 
 type repositoryTagsRoot struct {
@@ -64,6 +77,13 @@ type repositoryTagsRoot struct {
 type Registry struct {
 	Name      string    `json:"name,omitempty"`
 	CreatedAt time.Time `json:"created_at,omitempty"`
+}
+
+// Repository represents a repository
+type Repository struct {
+	RegistryName string         `json:"registry_name,omitempty"`
+	Name         string         `json:"name,omitempty"`
+	LatestTag    *RepositoryTag `json:"latest_tag,omitempty"`
 }
 
 // RepositoryTag represents a repository tag
@@ -147,6 +167,34 @@ func (svc *RegistryServiceOp) DockerCredentials(ctx context.Context, request *Re
 	return dc, resp, nil
 }
 
+// ListRepositories returns a list of the Repositories visible with the registry's credentials.
+func (svc *RegistryServiceOp) ListRepositories(ctx context.Context, request *RepositoryListRequest, opts *ListOptions) ([]*Repository, *Response, error) {
+	path := fmt.Sprintf("%s/%s/repositories", registryPath, request.RegistryName)
+	path, err := addOptions(path, opts)
+	if err != nil {
+		return nil, nil, err
+	}
+	req, err := svc.client.NewRequest(ctx, http.MethodGet, path, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	root := new(repositoriesRoot)
+
+	resp, err := svc.client.Do(ctx, req, root)
+	if err != nil {
+		return nil, resp, err
+	}
+
+	if l := root.Links; l != nil {
+		resp.Links = l
+	}
+	if m := root.Meta; m != nil {
+		resp.Meta = m
+	}
+
+	return root.Repositories, resp, nil
+}
+
 // ListRepositoryTags returns a list of the RepositoryTags available within the given repository.
 func (svc *RegistryServiceOp) ListRepositoryTags(ctx context.Context, request *RepositoryListTagsRequest, opts *ListOptions) ([]*RepositoryTag, *Response, error) {
 	path := fmt.Sprintf("%s/%s/repositories/%s/tags", registryPath, request.RegistryName, request.Repository)
@@ -159,6 +207,7 @@ func (svc *RegistryServiceOp) ListRepositoryTags(ctx context.Context, request *R
 		return nil, nil, err
 	}
 	root := new(repositoryTagsRoot)
+
 	resp, err := svc.client.Do(ctx, req, root)
 	if err != nil {
 		return nil, resp, err
