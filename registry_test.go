@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -121,4 +122,76 @@ func TestRegistry_DockerCredentials(t *testing.T) {
 			require.Equal(t, []byte(returnedConfig), got.DockerConfigJSON)
 		})
 	}
+}
+
+func TestRepository_List(t *testing.T) {
+	setup()
+	defer teardown()
+
+	wantRepositories := []*Repository{
+		{
+			RegistryName: "foo",
+			Name:         "repo-name",
+			LatestTag: &RepositoryTag{
+				RegistryName:        "foo",
+				Repository:          "repo-name",
+				Tag:                 "latest",
+				ManifestDigest:      "sha256:acd3ca9941a85e8ed16515bfc5328e4e2f8c128caa72959a58a127b7801ee01f",
+				CompressedSizeBytes: 2789669,
+				SizeBytes:           5843968,
+				UpdatedAt:           time.Date(2020, 4, 1, 0, 0, 0, 0, time.UTC),
+			},
+		},
+	}
+	getResponseJSON := `
+{
+	"repositories": [
+		{
+			"registry_name": "foo",
+			"name": "repo-name",
+			"latest_tag": {
+				"registry_name": "foo",
+				"repository": "repo-name",
+				"tag": "latest",
+				"manifest_digest": "sha256:acd3ca9941a85e8ed16515bfc5328e4e2f8c128caa72959a58a127b7801ee01f",
+				"compressed_size_bytes": 2789669,
+				"size_bytes": 5843968,
+				"updated_at": "2020-04-01T00:00:00Z"
+			}
+		}
+	],
+	"links": {
+	    "pages": {
+			"next": "https://api.digitalocean.com/v2/registry/foo/repositories?page=2",
+			"last": "https://api.digitalocean.com/v2/registry/foo/repositories?page=2"
+		}
+	},
+	"meta": {
+	    "total": 2
+	}
+}`
+
+	mux.HandleFunc("/v2/registry/foo/repositories", func(w http.ResponseWriter, r *http.Request) {
+		testMethod(t, r, http.MethodGet)
+		testFormValues(t, r, map[string]string{"page": "1", "per_page": "1"})
+		fmt.Fprint(w, getResponseJSON)
+	})
+	got, response, err := client.Registry.ListRepositories(ctx, &RepositoryListRequest{RegistryName: "foo"}, &ListOptions{Page: 1, PerPage: 1})
+	require.NoError(t, err)
+	require.Equal(t, wantRepositories, got)
+
+	gotRespLinks := response.Links
+	wantRespLinks := &Links{
+		Pages: &Pages{
+			Next: "https://api.digitalocean.com/v2/registry/foo/repositories?page=2",
+			Last: "https://api.digitalocean.com/v2/registry/foo/repositories?page=2",
+		},
+	}
+	assert.Equal(t, wantRespLinks, gotRespLinks)
+
+	gotRespMeta := response.Meta
+	wantRespMeta := &Meta{
+		Total: 2,
+	}
+	assert.Equal(t, wantRespMeta, gotRespMeta)
 }
