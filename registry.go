@@ -24,6 +24,8 @@ type RegistryService interface {
 	DockerCredentials(context.Context, *RegistryDockerCredentialsRequest) (*DockerCredentials, *Response, error)
 	ListRepositories(context.Context, *RepositoryListRequest, *ListOptions) ([]*Repository, *Response, error)
 	ListRepositoryTags(context.Context, *RepositoryListTagsRequest, *ListOptions) ([]*RepositoryTag, *Response, error)
+	DeleteTag(context.Context, *RepositoryDeleteTagRequest) (*Response, error)
+	DeleteManifest(context.Context, *RepositoryDeleteManifestRequest) (*Response, error)
 }
 
 var _ RegistryService = &RegistryServiceOp{}
@@ -55,6 +57,22 @@ type RepositoryListRequest struct {
 type RepositoryListTagsRequest struct {
 	RegistryName string `json:"registry_name,omitempty"`
 	Repository   string `json:"repository,omitempty"`
+}
+
+// RepositoryDeleteTagRequest represents a request to delete a tag
+// for a given repository in a registry.
+type RepositoryDeleteTagRequest struct {
+	RegistryName string `json:"registry_name,omitempty"`
+	Repository   string `json:"repository,omitempty"`
+	Tag          string `json:"tag,omitempty"`
+}
+
+// RepositoryDeleteManifestRequest represents a request to delete a manifest
+// for a given repository in a registry.
+type RepositoryDeleteManifestRequest struct {
+	RegistryName   string `json:"registry_name,omitempty"`
+	Repository     string `json:"repository,omitempty"`
+	ManifestDigest string `json:"manifest_digest,omitempty"`
 }
 
 type registryRoot struct {
@@ -221,4 +239,34 @@ func (svc *RegistryServiceOp) ListRepositoryTags(ctx context.Context, request *R
 	}
 
 	return root.Tags, resp, nil
+}
+
+// DeleteTag deletes a tag within a given repository.
+func (svc *RegistryServiceOp) DeleteTag(ctx context.Context, request *RepositoryDeleteTagRequest) (*Response, error) {
+	path := fmt.Sprintf("%s/%s/repositories/%s/tags/%s", registryPath, request.RegistryName, request.Repository, request.Tag)
+	req, err := svc.client.NewRequest(ctx, http.MethodDelete, path, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := svc.client.Do(ctx, req, nil)
+	if err != nil {
+		return resp, err
+	}
+
+	return resp, nil
+}
+
+// DeleteManifest deletes a manifest by its digest within a given repository.
+func (svc *RegistryServiceOp) DeleteManifest(ctx context.Context, request *RepositoryDeleteManifestRequest) (*Response, error) {
+	path := fmt.Sprintf("%s/%s/repositories/%s/digests/%s", registryPath, request.RegistryName, request.Repository, request.ManifestDigest)
+	req, err := svc.client.NewRequest(ctx, http.MethodDelete, path, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := svc.client.Do(ctx, req, nil)
+	if err != nil {
+		return resp, err
+	}
+
+	return resp, nil
 }

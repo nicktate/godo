@@ -11,6 +11,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const (
+	testRegistry   = "test-registry"
+	testRepository = "test-repository"
+	testTag        = "test-tag"
+	testDigest     = "sha256:e692418e4cbaf90ca69d05a66403747baa33ee08806650b51fab815ad7fc331f"
+)
+
 func TestRegistry_Create(t *testing.T) {
 	setup()
 	defer teardown()
@@ -18,7 +25,7 @@ func TestRegistry_Create(t *testing.T) {
 	createdAt, err := time.Parse(time.RFC3339, "2020-01-24T20:24:31Z")
 	require.NoError(t, err)
 	want := &Registry{
-		Name:      "foo",
+		Name:      testRegistry,
 		CreatedAt: createdAt,
 	}
 
@@ -29,7 +36,7 @@ func TestRegistry_Create(t *testing.T) {
 	createResponseJSON := `
 {
 	"registry": {
-		"name": "foo",
+		"name": "` + testRegistry + `",
         "created_at": "2020-01-24T20:24:31Z"
 	}
 }`
@@ -56,13 +63,13 @@ func TestRegistry_Get(t *testing.T) {
 	defer teardown()
 
 	want := &Registry{
-		Name: "foo",
+		Name: testRegistry,
 	}
 
 	getResponseJSON := `
 {
 	"registry": {
-		"name": "foo"
+		"name": "` + testRegistry + `"
 	}
 }`
 
@@ -130,13 +137,13 @@ func TestRepository_List(t *testing.T) {
 
 	wantRepositories := []*Repository{
 		{
-			RegistryName: "foo",
-			Name:         "repo-name",
+			RegistryName: testRegistry,
+			Name:         testRepository,
 			LatestTag: &RepositoryTag{
-				RegistryName:        "foo",
-				Repository:          "repo-name",
-				Tag:                 "latest",
-				ManifestDigest:      "sha256:acd3ca9941a85e8ed16515bfc5328e4e2f8c128caa72959a58a127b7801ee01f",
+				RegistryName:        testRegistry,
+				Repository:          testRepository,
+				Tag:                 testTag,
+				ManifestDigest:      testDigest,
 				CompressedSizeBytes: 2789669,
 				SizeBytes:           5843968,
 				UpdatedAt:           time.Date(2020, 4, 1, 0, 0, 0, 0, time.UTC),
@@ -146,13 +153,13 @@ func TestRepository_List(t *testing.T) {
 	getResponseJSON := `{
 	"repositories": [
 		{
-			"registry_name": "foo",
-			"name": "repo-name",
+			"registry_name": "` + testRegistry + `",
+			"name": "` + testRepository + `",
 			"latest_tag": {
-				"registry_name": "foo",
-				"repository": "repo-name",
-				"tag": "latest",
-				"manifest_digest": "sha256:acd3ca9941a85e8ed16515bfc5328e4e2f8c128caa72959a58a127b7801ee01f",
+				"registry_name": "` + testRegistry + `",
+				"repository": "` + testRepository + `",
+				"tag": "` + testTag + `",
+				"manifest_digest": "` + testDigest + `",
 				"compressed_size_bytes": 2789669,
 				"size_bytes": 5843968,
 				"updated_at": "2020-04-01T00:00:00Z"
@@ -161,8 +168,8 @@ func TestRepository_List(t *testing.T) {
 	],
 	"links": {
 	    "pages": {
-			"next": "https://api.digitalocean.com/v2/registry/foo/repositories?page=2",
-			"last": "https://api.digitalocean.com/v2/registry/foo/repositories?page=2"
+			"next": "https://api.digitalocean.com/v2/registry/` + testRegistry + `/repositories?page=2",
+			"last": "https://api.digitalocean.com/v2/registry/` + testRegistry + `/repositories?page=2"
 		}
 	},
 	"meta": {
@@ -170,20 +177,20 @@ func TestRepository_List(t *testing.T) {
 	}
 }`
 
-	mux.HandleFunc("/v2/registry/foo/repositories", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc(fmt.Sprintf("/v2/registry/%s/repositories", testRegistry), func(w http.ResponseWriter, r *http.Request) {
 		testMethod(t, r, http.MethodGet)
 		testFormValues(t, r, map[string]string{"page": "1", "per_page": "1"})
 		fmt.Fprint(w, getResponseJSON)
 	})
-	got, response, err := client.Registry.ListRepositories(ctx, &RepositoryListRequest{RegistryName: "foo"}, &ListOptions{Page: 1, PerPage: 1})
+	got, response, err := client.Registry.ListRepositories(ctx, &RepositoryListRequest{RegistryName: testRegistry}, &ListOptions{Page: 1, PerPage: 1})
 	require.NoError(t, err)
 	require.Equal(t, wantRepositories, got)
 
 	gotRespLinks := response.Links
 	wantRespLinks := &Links{
 		Pages: &Pages{
-			Next: "https://api.digitalocean.com/v2/registry/foo/repositories?page=2",
-			Last: "https://api.digitalocean.com/v2/registry/foo/repositories?page=2",
+			Next: fmt.Sprintf("https://api.digitalocean.com/v2/registry/%s/repositories?page=2", testRegistry),
+			Last: fmt.Sprintf("https://api.digitalocean.com/v2/registry/%s/repositories?page=2", testRegistry),
 		},
 	}
 	assert.Equal(t, wantRespLinks, gotRespLinks)
@@ -201,10 +208,10 @@ func TestRepository_ListTags(t *testing.T) {
 
 	wantTags := []*RepositoryTag{
 		{
-			RegistryName:        "foo",
-			Repository:          "repo-name",
-			Tag:                 "latest",
-			ManifestDigest:      "sha256:acd3ca9941a85e8ed16515bfc5328e4e2f8c128caa72959a58a127b7801ee01f",
+			RegistryName:        testRegistry,
+			Repository:          testRepository,
+			Tag:                 testTag,
+			ManifestDigest:      testDigest,
 			CompressedSizeBytes: 2789669,
 			SizeBytes:           5843968,
 			UpdatedAt:           time.Date(2020, 4, 1, 0, 0, 0, 0, time.UTC),
@@ -213,10 +220,10 @@ func TestRepository_ListTags(t *testing.T) {
 	getResponseJSON := `{
 	"tags": [
 		{
-			"registry_name": "foo",
-			"repository": "repo-name",
-			"tag": "latest",
-			"manifest_digest": "sha256:acd3ca9941a85e8ed16515bfc5328e4e2f8c128caa72959a58a127b7801ee01f",
+			"registry_name": "` + testRegistry + `",
+			"repository": "` + testRepository + `",
+			"tag": "` + testTag + `",
+			"manifest_digest": "` + testDigest + `",
 			"compressed_size_bytes": 2789669,
 			"size_bytes": 5843968,
 			"updated_at": "2020-04-01T00:00:00Z"
@@ -224,8 +231,8 @@ func TestRepository_ListTags(t *testing.T) {
 	],
 	"links": {
 	    "pages": {
-			"next": "https://api.digitalocean.com/v2/registry/foo/repositories/repo-name/tags?page=2",
-			"last": "https://api.digitalocean.com/v2/registry/foo/repositories/repo-name/tags?page=2"
+			"next": "https://api.digitalocean.com/v2/registry/` + testRegistry + `/repositories/` + testRepository + `/tags?page=2",
+			"last": "https://api.digitalocean.com/v2/registry/` + testRegistry + `/repositories/` + testRepository + `/tags?page=2"
 		}
 	},
 	"meta": {
@@ -233,20 +240,23 @@ func TestRepository_ListTags(t *testing.T) {
 	}
 }`
 
-	mux.HandleFunc("/v2/registry/foo/repositories/repo-name/tags", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc(fmt.Sprintf("/v2/registry/%s/repositories/%s/tags", testRegistry, testRepository), func(w http.ResponseWriter, r *http.Request) {
 		testMethod(t, r, http.MethodGet)
 		testFormValues(t, r, map[string]string{"page": "1", "per_page": "1"})
 		fmt.Fprint(w, getResponseJSON)
 	})
-	got, response, err := client.Registry.ListRepositoryTags(ctx, &RepositoryListTagsRequest{RegistryName: "foo", Repository: "repo-name"}, &ListOptions{Page: 1, PerPage: 1})
+	got, response, err := client.Registry.ListRepositoryTags(ctx, &RepositoryListTagsRequest{
+		RegistryName: testRegistry,
+		Repository:   testRepository,
+	}, &ListOptions{Page: 1, PerPage: 1})
 	require.NoError(t, err)
 	require.Equal(t, wantTags, got)
 
 	gotRespLinks := response.Links
 	wantRespLinks := &Links{
 		Pages: &Pages{
-			Next: "https://api.digitalocean.com/v2/registry/foo/repositories/repo-name/tags?page=2",
-			Last: "https://api.digitalocean.com/v2/registry/foo/repositories/repo-name/tags?page=2",
+			Next: fmt.Sprintf("https://api.digitalocean.com/v2/registry/%s/repositories/%s/tags?page=2", testRegistry, testRepository),
+			Last: fmt.Sprintf("https://api.digitalocean.com/v2/registry/%s/repositories/%s/tags?page=2", testRegistry, testRepository),
 		},
 	}
 	assert.Equal(t, wantRespLinks, gotRespLinks)
@@ -256,4 +266,36 @@ func TestRepository_ListTags(t *testing.T) {
 		Total: 2,
 	}
 	assert.Equal(t, wantRespMeta, gotRespMeta)
+}
+
+func TestRegistry_DeleteTag(t *testing.T) {
+	setup()
+	defer teardown()
+
+	mux.HandleFunc(fmt.Sprintf("/v2/registry/%s/repositories/%s/tags/%s", testRegistry, testRepository, testTag), func(w http.ResponseWriter, r *http.Request) {
+		testMethod(t, r, http.MethodDelete)
+	})
+
+	_, err := client.Registry.DeleteTag(ctx, &RepositoryDeleteTagRequest{
+		RegistryName: testRegistry,
+		Repository:   testRepository,
+		Tag:          testTag,
+	})
+	require.NoError(t, err)
+}
+
+func TestRegistry_DeleteManifest(t *testing.T) {
+	setup()
+	defer teardown()
+
+	mux.HandleFunc(fmt.Sprintf("/v2/registry/%s/repositories/%s/digests/%s", testRegistry, testRepository, testDigest), func(w http.ResponseWriter, r *http.Request) {
+		testMethod(t, r, http.MethodDelete)
+	})
+
+	_, err := client.Registry.DeleteManifest(ctx, &RepositoryDeleteManifestRequest{
+		RegistryName:   testRegistry,
+		Repository:     testRepository,
+		ManifestDigest: testDigest,
+	})
+	require.NoError(t, err)
 }
