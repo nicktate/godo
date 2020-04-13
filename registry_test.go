@@ -182,7 +182,7 @@ func TestRepository_List(t *testing.T) {
 		testFormValues(t, r, map[string]string{"page": "1", "per_page": "1"})
 		fmt.Fprint(w, getResponseJSON)
 	})
-	got, response, err := client.Registry.ListRepositories(ctx, &RepositoryListRequest{RegistryName: testRegistry}, &ListOptions{Page: 1, PerPage: 1})
+	got, response, err := client.Registry.ListRepositories(ctx, testRegistry, &ListOptions{Page: 1, PerPage: 1})
 	require.NoError(t, err)
 	require.Equal(t, wantRepositories, got)
 
@@ -245,10 +245,7 @@ func TestRepository_ListTags(t *testing.T) {
 		testFormValues(t, r, map[string]string{"page": "1", "per_page": "1"})
 		fmt.Fprint(w, getResponseJSON)
 	})
-	got, response, err := client.Registry.ListRepositoryTags(ctx, &RepositoryListTagsRequest{
-		RegistryName: testRegistry,
-		Repository:   testRepository,
-	}, &ListOptions{Page: 1, PerPage: 1})
+	got, response, err := client.Registry.ListRepositoryTags(ctx, testRegistry, testRepository, &ListOptions{Page: 1, PerPage: 1})
 	require.NoError(t, err)
 	require.Equal(t, wantTags, got)
 
@@ -276,11 +273,7 @@ func TestRegistry_DeleteTag(t *testing.T) {
 		testMethod(t, r, http.MethodDelete)
 	})
 
-	_, err := client.Registry.DeleteTag(ctx, &RepositoryDeleteTagRequest{
-		RegistryName: testRegistry,
-		Repository:   testRepository,
-		Tag:          testTag,
-	})
+	_, err := client.Registry.DeleteTag(ctx, testRegistry, testRepository, testTag)
 	require.NoError(t, err)
 }
 
@@ -292,10 +285,6 @@ func TestRegistry_DeleteManifest(t *testing.T) {
 		testMethod(t, r, http.MethodDelete)
 	})
 
-	_, err := client.Registry.DeleteManifest(ctx, &RepositoryDeleteManifestRequest{
-		RegistryName:   testRegistry,
-		Repository:     testRepository,
-		ManifestDigest: testDigest,
-	})
+	_, err := client.Registry.DeleteManifest(ctx, testRegistry, testRepository, testDigest)
 	require.NoError(t, err)
 }

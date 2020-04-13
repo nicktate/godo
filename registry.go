@@ -22,10 +22,14 @@ type RegistryService interface {
 	Get(context.Context) (*Registry, *Response, error)
 	Delete(context.Context) (*Response, error)
 	DockerCredentials(context.Context, *RegistryDockerCredentialsRequest) (*DockerCredentials, *Response, error)
-	ListRepositories(context.Context, *RepositoryListRequest, *ListOptions) ([]*Repository, *Response, error)
-	ListRepositoryTags(context.Context, *RepositoryListTagsRequest, *ListOptions) ([]*RepositoryTag, *Response, error)
-	DeleteTag(context.Context, *RepositoryDeleteTagRequest) (*Response, error)
-	DeleteManifest(context.Context, *RepositoryDeleteManifestRequest) (*Response, error)
+	ListRepositories(context.Context, string, *ListOptions) ([]*Repository, *Response, error)
+	ListRepositoryTags(context.Context, string, string, *ListOptions) ([]*RepositoryTag, *Response, error)
+	DeleteTag(context.Context, string, string, string) (*Response, error)
+	BulkDeleteTags(context.Context, string, string, *RepositoryBulkDeleteTagsRequest) (*Response, error)
+	GetTagDeletionStatus(context.Context, string, string, string) (*DeletionStatus, *Response, error)
+	DeleteManifest(context.Context, string, string, string) (*Response, error)
+	BulkDeleteManifests(context.Context, string, string, *RepositoryBulkDeleteManifestsRequest) (*Response, error)
+	GetManifestDeletionStatus(context.Context, string, string, string) (*DeletionStatus, *Response, error)
 }
 
 var _ RegistryService = &RegistryServiceOp{}
@@ -46,33 +50,16 @@ type RegistryDockerCredentialsRequest struct {
 	ReadWrite bool `json:"read_write"`
 }
 
-// RepositoryListRequest represents a request to retrieve repositories
-// for a given registry.
-type RepositoryListRequest struct {
-	RegistryName string `json:"registry_name,omitempty"`
+// RepositoryBulkDeleteTagsRequest represents a request to bulk delete tags
+// for a given repository in a registry.
+type RepositoryBulkDeleteTagsRequest struct {
+	Tags []string `json:"tags,omitempty"`
 }
 
-// RepositoryListTagsRequest represents a request to retrieve tags
+// RepositoryBulkDeleteManifestsRequest represents a request to bulk delete manifests
 // for a given repository in a registry.
-type RepositoryListTagsRequest struct {
-	RegistryName string `json:"registry_name,omitempty"`
-	Repository   string `json:"repository,omitempty"`
-}
-
-// RepositoryDeleteTagRequest represents a request to delete a tag
-// for a given repository in a registry.
-type RepositoryDeleteTagRequest struct {
-	RegistryName string `json:"registry_name,omitempty"`
-	Repository   string `json:"repository,omitempty"`
-	Tag          string `json:"tag,omitempty"`
-}
-
-// RepositoryDeleteManifestRequest represents a request to delete a manifest
-// for a given repository in a registry.
-type RepositoryDeleteManifestRequest struct {
-	RegistryName   string `json:"registry_name,omitempty"`
-	Repository     string `json:"repository,omitempty"`
-	ManifestDigest string `json:"manifest_digest,omitempty"`
+type RepositoryBulkDeleteManifestsRequest struct {
+	ManifestDigests []string `json:"manifest_digests,omitempty"`
 }
 
 type registryRoot struct {
@@ -113,6 +100,12 @@ type RepositoryTag struct {
 	CompressedSizeBytes uint64    `json:"compressed_size_bytes,omitempty"`
 	SizeBytes           uint64    `json:"size_bytes,omitempty"`
 	UpdatedAt           time.Time `json:"updated_at,omitempty"`
+}
+
+// DeletionStatus represents the deletion status of a tag or manifest
+type DeletionStatus struct {
+	Pending bool   `json:"pending"`
+	Error   string `json:"error,omitempty"`
 }
 
 // Get retrieves the details of a Registry.
@@ -186,8 +179,8 @@ func (svc *RegistryServiceOp) DockerCredentials(ctx context.Context, request *Re
 }
 
 // ListRepositories returns a list of the Repositories visible with the registry's credentials.
-func (svc *RegistryServiceOp) ListRepositories(ctx context.Context, request *RepositoryListRequest, opts *ListOptions) ([]*Repository, *Response, error) {
-	path := fmt.Sprintf("%s/%s/repositories", registryPath, request.RegistryName)
+func (svc *RegistryServiceOp) ListRepositories(ctx context.Context, registry string, opts *ListOptions) ([]*Repository, *Response, error) {
+	path := fmt.Sprintf("%s/%s/repositories", registryPath, registry)
 	path, err := addOptions(path, opts)
 	if err != nil {
 		return nil, nil, err
@@ -214,8 +207,8 @@ func (svc *RegistryServiceOp) ListRepositories(ctx context.Context, request *Rep
 }
 
 // ListRepositoryTags returns a list of the RepositoryTags available within the given repository.
-func (svc *RegistryServiceOp) ListRepositoryTags(ctx context.Context, request *RepositoryListTagsRequest, opts *ListOptions) ([]*RepositoryTag, *Response, error) {
-	path := fmt.Sprintf("%s/%s/repositories/%s/tags", registryPath, request.RegistryName, request.Repository)
+func (svc *RegistryServiceOp) ListRepositoryTags(ctx context.Context, registry, repository string, opts *ListOptions) ([]*RepositoryTag, *Response, error) {
+	path := fmt.Sprintf("%s/%s/repositories/%s/tags", registryPath, registry, repository)
 	path, err := addOptions(path, opts)
 	if err != nil {
 		return nil, nil, err
@@ -242,8 +235,8 @@ func (svc *RegistryServiceOp) ListRepositoryTags(ctx context.Context, request *R
 }
 
 // DeleteTag deletes a tag within a given repository.
-func (svc *RegistryServiceOp) DeleteTag(ctx context.Context, request *RepositoryDeleteTagRequest) (*Response, error) {
-	path := fmt.Sprintf("%s/%s/repositories/%s/tags/%s", registryPath, request.RegistryName, request.Repository, request.Tag)
+func (svc *RegistryServiceOp) DeleteTag(ctx context.Context, registry, repository, tag string) (*Response, error) {
+	path := fmt.Sprintf("%s/%s/repositories/%s/tags/%s", registryPath, registry, repository, tag)
 	req, err := svc.client.NewRequest(ctx, http.MethodDelete, path, nil)
 	if err != nil {
 		return nil, err
@@ -256,9 +249,41 @@ func (svc *RegistryServiceOp) DeleteTag(ctx context.Context, request *Repository
 	return resp, nil
 }
 
+// BulkDeleteTags deletes multiple tags within a given repository.
+func (svc *RegistryServiceOp) BulkDeleteTags(ctx context.Context, registry, repository string, request *RepositoryBulkDeleteTagsRequest) (*Response, error) {
+	path := fmt.Sprintf("%s/%s/repositories/%s/tags", registryPath, registry, repository)
+	req, err := svc.client.NewRequest(ctx, http.MethodDelete, path, request)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := svc.client.Do(ctx, req, nil)
+	if err != nil {
+		return resp, err
+	}
+
+	return resp, nil
+}
+
+// GetTagDeletionStatus returns the deletion status for a tag from a bulk delete request.
+func (svc *RegistryServiceOp) GetTagDeletionStatus(ctx context.Context, registry, repository, tag string) (*DeletionStatus, *Response, error) {
+	path := fmt.Sprintf("%s/%s/repositories/%s/tags/%s/deletion-status", registryPath, registry, repository, tag)
+	req, err := svc.client.NewRequest(ctx, http.MethodGet, path, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	status := new(DeletionStatus)
+
+	resp, err := svc.client.Do(ctx, req, status)
+	if err != nil {
+		return nil, resp, err
+	}
+
+	return status, resp, nil
+}
+
 // DeleteManifest deletes a manifest by its digest within a given repository.
-func (svc *RegistryServiceOp) DeleteManifest(ctx context.Context, request *RepositoryDeleteManifestRequest) (*Response, error) {
-	path := fmt.Sprintf("%s/%s/repositories/%s/digests/%s", registryPath, request.RegistryName, request.Repository, request.ManifestDigest)
+func (svc *RegistryServiceOp) DeleteManifest(ctx context.Context, registry, repository, digest string) (*Response, error) {
+	path := fmt.Sprintf("%s/%s/repositories/%s/digests/%s", registryPath, registry, repository, digest)
 	req, err := svc.client.NewRequest(ctx, http.MethodDelete, path, nil)
 	if err != nil {
 		return nil, err
@@ -269,4 +294,36 @@ func (svc *RegistryServiceOp) DeleteManifest(ctx context.Context, request *Repos
 	}
 
 	return resp, nil
+}
+
+// BulkDeleteManifests deletes multiple tags within a given repository.
+func (svc *RegistryServiceOp) BulkDeleteManifests(ctx context.Context, registry, repository string, request *RepositoryBulkDeleteManifestsRequest) (*Response, error) {
+	path := fmt.Sprintf("%s/%s/repositories/%s/digests", registryPath, registry, repository)
+	req, err := svc.client.NewRequest(ctx, http.MethodDelete, path, request)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := svc.client.Do(ctx, req, nil)
+	if err != nil {
+		return resp, err
+	}
+
+	return resp, nil
+}
+
+// GetManifestDeletionStatus returns the deletion status for a manifest from a bulk delete request.
+func (svc *RegistryServiceOp) GetManifestDeletionStatus(ctx context.Context, registry, repository, digest string) (*DeletionStatus, *Response, error) {
+	path := fmt.Sprintf("%s/%s/repositories/%s/digests/%s/deletion-status", registryPath, registry, repository, digest)
+	req, err := svc.client.NewRequest(ctx, http.MethodGet, path, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	status := new(DeletionStatus)
+
+	resp, err := svc.client.Do(ctx, req, status)
+	if err != nil {
+		return nil, resp, err
+	}
+
+	return status, resp, nil
 }
